@@ -1,8 +1,6 @@
-flask
-python-dotenv
+streamlit
 supabase
 psycopg2-binary
 PyMuPDF
 sentence-transformers
 groq
-gunicorn
