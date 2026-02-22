@@ -1,51 +1,42 @@
--- ============================================================
--- CiteMate AI — Supabase Setup Script
--- Run this in: Supabase Dashboard → SQL Editor
--- ============================================================
+-- Run this in your Supabase SQL editor (Dashboard → SQL Editor → New Query)
 
 -- 1. Enable pgvector extension
-CREATE EXTENSION IF NOT EXISTS vector;
+create extension if not exists vector;
 
--- 2. Create the documents table
-CREATE TABLE IF NOT EXISTS documents (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  content     TEXT NOT NULL,
-  embedding   VECTOR(384),          -- all-MiniLM-L6-v2 produces 384-dim vectors
-  page_number INTEGER,
-  source_file TEXT
+-- 2. Create documents table
+create table if not exists documents (
+    id          uuid primary key default gen_random_uuid(),
+    content     text,
+    embedding   vector(384),
+    page_number integer,
+    source_file text
 );
 
 -- 3. Create IVFFlat index for fast cosine similarity search
---    (IVFFlat is best for datasets < 1M rows; lists=100 is a good default for small sets)
-CREATE INDEX IF NOT EXISTS documents_embedding_idx
-  ON documents
-  USING ivfflat (embedding vector_cosine_ops)
-  WITH (lists = 100);
+create index if not exists idx_embedding
+on documents
+using ivfflat (embedding vector_cosine_ops)
+with (lists = 100);
 
--- 4. Create the RPC function used by the Flask app for similarity search
-CREATE OR REPLACE FUNCTION match_documents(
-  query_embedding VECTOR(384),
-  match_count     INT DEFAULT 5
+-- 4. Create similarity search RPC function
+create or replace function match_documents(
+  query_embedding vector(384),
+  match_count     int default 5
 )
-RETURNS TABLE (
-  id          UUID,
-  content     TEXT,
-  page_number INTEGER,
-  source_file TEXT,
-  similarity  FLOAT
+returns table (
+  content     text,
+  page_number integer,
+  source_file text,
+  similarity  float
 )
-LANGUAGE SQL STABLE
-AS $$
-  SELECT
-    id,
+language sql stable
+as $$
+  select
     content,
     page_number,
     source_file,
-    1 - (embedding <=> query_embedding) AS similarity
-  FROM documents
-  ORDER BY embedding <=> query_embedding
-  LIMIT match_count;
+    1 - (embedding <=> query_embedding) as similarity
+  from documents
+  order by embedding <=> query_embedding
+  limit match_count;
 $$;
-
--- ✅ Done! No RLS. Table is public.
--- The Flask app will now be able to insert rows and call match_documents().
