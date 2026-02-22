@@ -145,7 +145,7 @@ def build_context(chunks: list, word_limit: int = 1500) -> str:
 
 def ask_groq(context: str, question: str) -> str:
     resp = groq_client.chat.completions.create(
-        model="llama3-8b-8192",
+        model="llama-3.1-8b-instant",
         messages=[
             {"role": "system", "content": (
                 "You are a research assistant. "
