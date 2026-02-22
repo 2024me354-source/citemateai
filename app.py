@@ -1,166 +1,192 @@
-import os
+import streamlit as st
 import fitz  # PyMuPDF
-from flask import Flask, request, jsonify, render_template
-from dotenv import load_dotenv
+import re
 from supabase import create_client, Client
 from sentence_transformers import SentenceTransformer
 from groq import Groq
 
-load_dotenv()
+# ── Secrets ──────────────────────────────────────────────────────────────────
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 
-app = Flask(__name__)
+# ── Cached resources ──────────────────────────────────────────────────────────
+@st.cache_resource
+def load_model():
+    return SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
-# --- Clients ---
-supabase: Client = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
-groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
-embedder = SentenceTransformer("all-MiniLM-L6-v2")
+@st.cache_resource
+def get_supabase() -> Client:
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
 
+@st.cache_resource
+def get_groq():
+    return Groq(api_key=GROQ_API_KEY)
 
-# --- Helpers ---
+model     = load_model()
+supabase  = get_supabase()
+groq_client = get_groq()
 
-def extract_chunks_from_pdf(file_bytes, filename):
-    """Extract text chunks (500-800 words) with page numbers from a PDF."""
-    doc = fitz.open(stream=file_bytes, filetype="pdf")
-    chunks = []
-
-    for page_num in range(len(doc)):
-        page = doc[page_num]
+# ── Helpers ───────────────────────────────────────────────────────────────────
+def extract_pages(uploaded_file) -> list[dict]:
+    """Return list of {page_number, text} dicts."""
+    doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+    pages = []
+    for i, page in enumerate(doc, start=1):
         text = page.get_text("text").strip()
-        if not text:
-            continue
-
-        words = text.split()
-        # Split page text into ~600-word chunks
-        chunk_size = 600
-        for i in range(0, len(words), chunk_size):
-            chunk_words = words[i:i + chunk_size]
-            chunk_text = " ".join(chunk_words)
-            if len(chunk_text) > 50:  # skip tiny fragments
-                chunks.append({
-                    "content": chunk_text,
-                    "page_number": page_num + 1,
-                    "source_file": filename
-                })
-
+        if text:
+            pages.append({"page_number": i, "text": text})
     doc.close()
+    return pages
+
+
+def chunk_text(text: str, min_words: int = 500, max_words: int = 800) -> list[str]:
+    """Split text into chunks of roughly min_words–max_words words."""
+    words = text.split()
+    chunks, current = [], []
+    for word in words:
+        current.append(word)
+        if len(current) >= max_words:
+            chunks.append(" ".join(current))
+            current = []
+    if len(current) >= min_words or (not chunks and current):
+        chunks.append(" ".join(current))
+    elif current and chunks:
+        chunks[-1] += " " + " ".join(current)
     return chunks
 
 
-def embed_text(text):
-    """Generate a 384-dim embedding vector."""
-    return embedder.encode(text).tolist()
+def embed(texts: list[str]) -> list[list[float]]:
+    """Generate normalized 384-dim embeddings."""
+    vecs = model.encode(texts, normalize_embeddings=True)
+    return vecs.tolist()
 
 
-def store_chunks(chunks):
-    """Insert chunks with embeddings into Supabase."""
-    rows = []
-    for chunk in chunks:
-        embedding = embed_text(chunk["content"])
-        rows.append({
-            "content": chunk["content"],
-            "embedding": embedding,
+def ingest_pdf(uploaded_file):
+    filename = uploaded_file.name
+    pages = extract_pages(uploaded_file)
+
+    all_chunks = []
+    for p in pages:
+        for chunk in chunk_text(p["text"]):
+            all_chunks.append({"page_number": p["page_number"], "content": chunk})
+
+    progress = st.progress(0, text="Embedding chunks…")
+    total = len(all_chunks)
+
+    for idx, chunk in enumerate(all_chunks):
+        vec = embed([chunk["content"]])[0]
+        supabase.table("documents").insert({
+            "content":     chunk["content"],
+            "embedding":   vec,
             "page_number": chunk["page_number"],
-            "source_file": chunk["source_file"]
-        })
-    # Insert in batches of 50
-    for i in range(0, len(rows), 50):
-        supabase.table("documents").insert(rows[i:i+50]).execute()
+            "source_file": filename,
+        }).execute()
+        progress.progress((idx + 1) / total, text=f"Storing chunk {idx+1}/{total}…")
+
+    progress.empty()
+    return total
 
 
-def search_similar_chunks(question, top_k=5):
-    """Embed question and find top-k similar chunks via pgvector."""
-    question_embedding = embed_text(question)
+def retrieve(question: str, match_count: int = 5) -> list[dict]:
+    vec = embed([question])[0]
     result = supabase.rpc("match_documents", {
-        "query_embedding": question_embedding,
-        "match_count": top_k
+        "query_embedding": vec,
+        "match_count": match_count,
     }).execute()
-    return result.data
+    return result.data or []
 
 
-def ask_groq(question, context_chunks):
-    """Send question + context to Groq and return answer with references."""
-    context_text = ""
-    references = []
+def build_context(chunks: list[dict], word_limit: int = 1500) -> str:
+    parts, total = [], 0
+    for c in chunks:
+        words = c["content"].split()
+        if total + len(words) > word_limit:
+            remaining = word_limit - total
+            if remaining > 0:
+                parts.append(" ".join(words[:remaining]))
+            break
+        parts.append(c["content"])
+        total += len(words)
+    return "\n\n---\n\n".join(parts)
 
-    for i, chunk in enumerate(context_chunks):
-        context_text += f"\n[Source {i+1}: {chunk['source_file']}, Page {chunk['page_number']}]\n{chunk['content']}\n"
-        ref = f"{chunk['source_file']} (Page {chunk['page_number']})"
-        if ref not in references:
-            references.append(ref)
 
-    prompt = f"""You are a helpful research assistant. Answer the user's question using ONLY the context provided below.
-If the answer is not in the context, say "I could not find relevant information in the uploaded documents."
-Always cite the source file and page number when referencing information.
-
-CONTEXT:
-{context_text}
-
-QUESTION: {question}
-
-ANSWER:"""
-
-    response = groq_client.chat.completions.create(
-        model="mixtral-8x7b-32768",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2,
-        max_tokens=1024
+def ask_groq(context: str, question: str) -> str:
+    system_prompt = (
+        "You are a research assistant. "
+        "Answer ONLY using the provided context. "
+        "Cite sources using the format (source_file, page_number)."
     )
-
-    answer = response.choices[0].message.content.strip()
-    return answer, references
-
-
-# --- Routes ---
-
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-
-@app.route("/upload", methods=["POST"])
-def upload():
-    if "pdf" not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
-
-    file = request.files["pdf"]
-    if not file.filename.endswith(".pdf"):
-        return jsonify({"error": "Only PDF files are supported"}), 400
-
-    file_bytes = file.read()
-    filename = file.filename
-
-    try:
-        chunks = extract_chunks_from_pdf(file_bytes, filename)
-        if not chunks:
-            return jsonify({"error": "Could not extract text from PDF"}), 400
-
-        store_chunks(chunks)
-        return jsonify({
-            "message": f"Successfully indexed '{filename}'",
-            "chunks_indexed": len(chunks)
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    user_prompt = f"Context:\n{context}\n\nQuestion:\n{question}"
+    response = groq_client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": user_prompt},
+        ],
+        temperature=0.2,
+        max_tokens=1024,
+    )
+    return response.choices[0].message.content.strip()
 
 
-@app.route("/ask", methods=["POST"])
-def ask():
-    data = request.get_json()
-    question = data.get("question", "").strip()
+# ── UI ────────────────────────────────────────────────────────────────────────
+st.set_page_config(page_title="CiteMate AI", page_icon="📚", layout="centered")
+st.title("📚 CiteMate AI – PDF Research Assistant")
+st.caption("Upload research PDFs and ask questions. Answers come with citations.")
 
-    if not question:
-        return jsonify({"error": "No question provided"}), 400
+# ── Section 1: Upload ─────────────────────────────────────────────────────────
+st.header("1 · Upload PDFs")
+uploaded_files = st.file_uploader(
+    "Choose one or more PDF files",
+    type="pdf",
+    accept_multiple_files=True,
+)
 
-    try:
-        context_chunks = search_similar_chunks(question, top_k=5)
-        if not context_chunks:
-            return jsonify({"answer": "No relevant documents found. Please upload some PDFs first.", "references": []})
+if uploaded_files:
+    if st.button("Ingest PDFs"):
+        for uf in uploaded_files:
+            with st.spinner(f"Processing **{uf.name}**…"):
+                try:
+                    n = ingest_pdf(uf)
+                    st.success(f"✅ {uf.name} — {n} chunk(s) stored.")
+                except Exception as e:
+                    st.error(f"❌ {uf.name} failed: {e}")
 
-        answer, references = ask_groq(question, context_chunks)
-        return jsonify({"answer": answer, "references": references})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+# ── Section 2: Ask ────────────────────────────────────────────────────────────
+st.header("2 · Ask a Question")
+question = st.text_area("Your question", placeholder="What does the paper say about…?", height=100)
 
+top_k = st.slider("Chunks to retrieve", min_value=3, max_value=10, value=5)
 
-if __name__ == "__main__":
-    app.run(debug=True)
+if st.button("Get Answer", disabled=not question.strip()):
+    with st.spinner("Searching knowledge base…"):
+        try:
+            chunks = retrieve(question, match_count=top_k)
+        except Exception as e:
+            st.error(f"Retrieval error: {e}")
+            st.stop()
+
+    if not chunks:
+        st.warning("No relevant content found. Upload some PDFs first.")
+        st.stop()
+
+    context = build_context(chunks)
+
+    with st.spinner("Asking Groq…"):
+        try:
+            answer = ask_groq(context, question)
+        except Exception as e:
+            st.error(f"LLM error: {e}")
+            st.stop()
+
+    # ── Section 3: Answer ─────────────────────────────────────────────────────
+    st.header("3 · Answer")
+    st.markdown(answer)
+
+    # ── Section 4: Citations ──────────────────────────────────────────────────
+    st.header("4 · Source Chunks")
+    for i, c in enumerate(chunks, start=1):
+        sim_pct = round(c.get("similarity", 0) * 100, 1)
+        with st.expander(f"[{i}] {c['source_file']} — page {c['page_number']}  (similarity {sim_pct}%)"):
+            st.write(c["content"])
