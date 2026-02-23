@@ -252,7 +252,7 @@ def ask_groq(context, question, citation_format="APA"):
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE CONFIG — must be first Streamlit call
 # ═══════════════════════════════════════════════════════════════════════════════
-st.set_page_config(page_title="CiteMate AI", page_icon="⬡", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="CiteMate AI", page_icon="🔴", layout="wide", initial_sidebar_state="collapsed")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # INJECT CSS — target every Streamlit wrapper aggressively
@@ -847,6 +847,14 @@ div[data-testid="stRadio"] input { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
+
+
+# ── Custom SVG Favicon ────────────────────────────────────────────────────────
+st.markdown("""
+<head>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' fill='%230b0b0e'/><polygon points='32,6 58,20 58,44 32,58 6,44 6,20' fill='none' stroke='%23e8132a' stroke-width='4'/><polygon points='32,14 50,24 50,40 32,50 14,40 14,24' fill='%23e8132a'/><text x='32' y='37' font-family='Arial Black' font-size='18' font-weight='900' fill='%23ffffff' text-anchor='middle'>C</text></svg>">
+</head>
+""", unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # HERO
