@@ -119,48 +119,132 @@ def build_context(chunks, word_limit=1500):
         parts.append(c["content"]); total += len(words)
     return "\n\n---\n\n".join(parts)
 
-CITATION_PROMPTS = {
-    "APA": (
-        "You are a research assistant. Answer ONLY using the provided context. "
-        "Format all in-text citations in APA 7th edition style: (Author, Year, p. X) or (Filename, p. X) if no author is known. "
-        "At the end of your answer, add a References section listing each source in APA format. "
-        "Use the filename and page number where full details are unavailable."
-    ),
-    "MLA": (
-        "You are a research assistant. Answer ONLY using the provided context. "
-        "Format all in-text citations in MLA 9th edition style: (Author Page) or (Filename Page) if no author is known. "
-        "At the end of your answer, add a Works Cited section in MLA format. "
-        "Use filename and page number where full details are unavailable."
-    ),
-    "Chicago": (
-        "You are a research assistant. Answer ONLY using the provided context. "
-        "Format all citations as Chicago footnote-style, indicated inline like [1], [2], etc. "
-        "At the end of your answer, add a numbered Notes section with full Chicago citations. "
-        "Use filename and page number where full details are unavailable."
-    ),
-    "Harvard": (
-        "You are a research assistant. Answer ONLY using the provided context. "
-        "Format all in-text citations in Harvard style: (Author Year, p. X) or (Filename Year, p. X) if no author is known. "
-        "At the end of your answer, add a Reference List section in Harvard format. "
-        "Use filename and page number where full details are unavailable."
-    ),
-    "IEEE": (
-        "You are a research assistant. Answer ONLY using the provided context. "
-        "Format all citations as IEEE numbered references inline like [1], [2], etc. "
-        "At the end of your answer, add a numbered References section in IEEE format: "
-        "[1] A. Author, Title, Publisher, Year, p. X. Use filename and page number where full details are unavailable."
-    ),
+# ── Per-format citation templates injected into user message ─────────────────
+CITATION_FORMATS = {
+    "APA": {
+        "label": "APA 7th Edition",
+        "inline": "(Filename, p. PageNumber)",
+        "section_header": "References",
+        "section_entry": "Filename. (n.d.). Document title. p. PageNumber.",
+        "example_inline": "The system was tested under load (report.pdf, p. 12).",
+        "example_entry": "report.pdf. (n.d.). System Load Analysis. p. 12.",
+        "rules": (
+            "STRICT APA 7th EDITION RULES:\n"
+            "1. Every factual claim MUST have an inline citation immediately after it.\n"
+            "2. Inline format: (Filename, p. PageNumber) — example: (report.pdf, p. 5)\n"
+            "3. DO NOT write (Author, Year) — use filename and page only since we have no author/year.\n"
+            "4. At the end write a section titled exactly: References\n"
+            "5. Each entry format: Filename. (n.d.). [Content summary]. p. PageNumber.\n"
+            "6. Example entry: report.pdf. (n.d.). Discussion of neural network architecture. p. 5.\n"
+            "7. List only sources actually cited in the answer."
+        ),
+    },
+    "MLA": {
+        "label": "MLA 9th Edition",
+        "inline": "(Filename PageNumber)",
+        "section_header": "Works Cited",
+        "section_entry": "Filename. PageNumber.",
+        "example_inline": "The results confirmed the hypothesis (report.pdf 12).",
+        "example_entry": "report.pdf. p. 12.",
+        "rules": (
+            "STRICT MLA 9th EDITION RULES:\n"
+            "1. Every factual claim MUST have an inline citation immediately after it.\n"
+            "2. Inline format: (Filename PageNumber) — NO comma, NO 'p.' — example: (report.pdf 5)\n"
+            "3. DO NOT use parentheses with commas like (report.pdf, p. 5) — MLA uses NO comma and NO 'p.'\n"
+            "4. At the end write a section titled exactly: Works Cited\n"
+            "5. Each entry format: Filename, p. PageNumber.\n"
+            "6. Example entry: report.pdf, p. 5.\n"
+            "7. List only sources actually cited. Entries go in alphabetical order by filename."
+        ),
+    },
+    "Chicago": {
+        "label": "Chicago 17th Edition",
+        "inline": "superscript number like¹",
+        "section_header": "Notes",
+        "section_entry": "N. Filename, p. PageNumber.",
+        "example_inline": "The experiment showed significant results.¹",
+        "example_entry": "1. report.pdf, p. 12.",
+        "rules": (
+            "STRICT CHICAGO 17th EDITION (NOTES-BIBLIOGRAPHY) RULES:\n"
+            "1. Every factual claim MUST have a superscript number immediately after the sentence, like: The test passed.¹\n"
+            "2. Use consecutive superscript numbers: ¹ ² ³ ⁴ ⁵ etc. (use actual Unicode superscripts)\n"
+            "3. DO NOT use (Author, Year) or [1] brackets — Chicago uses superscript numbers only.\n"
+            "4. At the end write a section titled exactly: Notes\n"
+            "5. Each entry format: N. Filename, p. PageNumber.\n"
+            "6. Example entry: 1. report.pdf, p. 5.\n"
+            "7. Number the notes consecutively starting from 1."
+        ),
+    },
+    "Harvard": {
+        "label": "Harvard",
+        "inline": "(Filename n.d., p. PageNumber)",
+        "section_header": "Reference List",
+        "section_entry": "Filename n.d., p. PageNumber.",
+        "example_inline": "The model performed well (report.pdf n.d., p. 12).",
+        "example_entry": "report.pdf n.d., p. 12.",
+        "rules": (
+            "STRICT HARVARD REFERENCING RULES:\n"
+            "1. Every factual claim MUST have an inline citation immediately after it.\n"
+            "2. Inline format: (Filename n.d., p. PageNumber) — example: (report.pdf n.d., p. 5)\n"
+            "3. Harvard uses 'n.d.' (no date) when year is unknown — DO NOT omit it.\n"
+            "4. DO NOT use MLA style (no comma) or APA style — Harvard ALWAYS includes 'n.d.' and 'p.'\n"
+            "5. At the end write a section titled exactly: Reference List\n"
+            "6. Each entry format: Filename n.d., p. PageNumber.\n"
+            "7. Example entry: report.pdf n.d., p. 5.\n"
+            "8. List only sources cited, in alphabetical order by filename."
+        ),
+    },
+    "IEEE": {
+        "label": "IEEE",
+        "inline": "[N] bracket number",
+        "section_header": "References",
+        "section_entry": "[N] Filename, p. PageNumber.",
+        "example_inline": "The protocol was validated [1].",
+        "example_entry": "[1] report.pdf, p. 12.",
+        "rules": (
+            "STRICT IEEE REFERENCING RULES:\n"
+            "1. Every factual claim MUST have a bracketed number immediately after it: [1], [2], [3]\n"
+            "2. Inline format: [N] placed right after the claim — example: The test passed [1].\n"
+            "3. DO NOT use (Author, Year) or superscripts — IEEE uses [N] brackets ONLY.\n"
+            "4. Number references in the order they first appear in the text, starting from [1].\n"
+            "5. At the end write a section titled exactly: References\n"
+            "6. Each entry format: [N] Filename, p. PageNumber.\n"
+            "7. Example entry: [1] report.pdf, p. 5.\n"
+            "8. The same source cited multiple times always uses the SAME number."
+        ),
+    },
 }
 
+def build_citation_prompt(fmt: dict) -> str:
+    return (
+        f"You are a precise research assistant using {fmt['label']} citation style.\n\n"
+        f"{fmt['rules']}\n\n"
+        f"INLINE EXAMPLE: {fmt['example_inline']}\n"
+        f"REFERENCE ENTRY EXAMPLE: {fmt['example_entry']}\n\n"
+        "CRITICAL: Answer ONLY using the provided context. "
+        "Do NOT invent information. "
+        f"You MUST follow {fmt['label']} format exactly as shown above — do not substitute another citation style."
+    )
+
 def ask_groq(context, question, citation_format="APA"):
-    system_prompt = CITATION_PROMPTS.get(citation_format, CITATION_PROMPTS["APA"])
+    fmt = CITATION_FORMATS.get(citation_format, CITATION_FORMATS["APA"])
+    system_prompt = build_citation_prompt(fmt)
+    # Reinforce format in the user message too so the model can't ignore it
+    user_msg = (
+        f"Use ONLY {fmt['label']} citation style.\n"
+        f"Inline citations look like: {fmt['example_inline']}\n"
+        f"End section header: {fmt['section_header']}\n\n"
+        f"Context:\n{context}\n\n"
+        f"Question:\n{question}"
+    )
     resp = groq_client.chat.completions.create(
         model="llama-3.1-8b-instant",
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Context:\n{context}\n\nQuestion:\n{question}"},
+            {"role": "user",   "content": user_msg},
         ],
-        temperature=0.2, max_tokens=1024,
+        temperature=0.1,
+        max_tokens=1200,
     )
     return resp.choices[0].message.content.strip()
 
@@ -814,11 +898,11 @@ with tab_main:
 
         # ── Citation format selector ──────────────────────
         FORMAT_INFO = {
-            "APA":     "Author-date in-text · References list",
-            "MLA":     "Author-page in-text · Works Cited",
-            "Chicago": "Numbered footnotes [1] · Notes list",
-            "Harvard": "Author-year in-text · Reference List",
-            "IEEE":    "Numbered inline [1] · IEEE References",
+            "APA":     "(report.pdf, p. 5)  ·  References",
+            "MLA":     "(report.pdf 5)  ·  Works Cited",
+            "Chicago": "superscript ¹ ² ³  ·  Notes",
+            "Harvard": "(report.pdf n.d., p. 5)  ·  Reference List",
+            "IEEE":    "[1] [2] [3] brackets  ·  References",
         }
         st.markdown('''<div class="cite-format-box">
   <div class="cite-format-title">⬡ &nbsp; Citation Format</div>
