@@ -249,10 +249,43 @@ def ask_groq(context, question, citation_format="APA"):
     return resp.choices[0].message.content.strip()
 
 
+# ── Custom PIL Favicon ───────────────────────────────────────────────────────
+@st.cache_resource
+def get_favicon():
+    from PIL import Image, ImageDraw
+    import math
+    SIZE = 64
+    img  = Image.new("RGBA", (SIZE, SIZE), (0,0,0,0))
+    draw = ImageDraw.Draw(img)
+    # Rounded black bg
+    def rrect(xy, r, fill):
+        x0,y0,x1,y1 = xy
+        draw.rectangle([x0+r,y0,x1-r,y1], fill=fill)
+        draw.rectangle([x0,y0+r,x1,y1-r], fill=fill)
+        for ex,ey in [(x0,y0),(x1-r*2,y0),(x0,y1-r*2),(x1-r*2,y1-r*2)]:
+            draw.ellipse([ex,ey,ex+r*2,ey+r*2], fill=fill)
+    rrect([0,0,63,63], 10, (11,11,14,255))
+    # 3 spinner blades
+    cx, cy = 32, 32
+    COLORS = [(232,19,42,255),(160,10,25,255),(200,14,33,255)]
+    for i, ang in enumerate([270, 30, 150]):
+        a  = math.radians(ang)
+        tx = cx + 20*math.cos(a); ty = cy + 20*math.sin(a)
+        la = math.radians(ang+140)
+        lx = cx + 12*math.cos(la); ly = cy + 12*math.sin(la)
+        ra = math.radians(ang-140)
+        rx = cx + 12*math.cos(ra); ry = cy + 12*math.sin(ra)
+        draw.polygon([(tx,ty),(cx,cy),(lx,ly)], fill=COLORS[i])
+    # Glow + white center dot
+    for r in range(8,4,-1):
+        draw.ellipse([cx-r,cy-r,cx+r,cy+r], fill=(232,19,42,int(60*(8-r)/4)))
+    draw.ellipse([cx-3,cy-3,cx+3,cy+3], fill=(255,255,255,255))
+    return img
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE CONFIG — must be first Streamlit call
 # ═══════════════════════════════════════════════════════════════════════════════
-st.set_page_config(page_title="CiteMate AI", page_icon="🔴", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="CiteMate AI", page_icon=get_favicon(), layout="wide", initial_sidebar_state="collapsed")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # INJECT CSS — target every Streamlit wrapper aggressively
@@ -849,12 +882,7 @@ div[data-testid="stRadio"] input { display: none !important; }
 
 
 
-# ── Custom SVG Favicon ────────────────────────────────────────────────────────
-st.markdown("""
-<head>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%230b0b0e'/><rect width='64' height='64' rx='12' fill='url(%23grad)' opacity='0.4'/><defs><radialGradient id='grad' cx='50%25' cy='30%25' r='60%25'><stop offset='0%25' stop-color='%23e8132a' stop-opacity='0.3'/><stop offset='100%25' stop-color='%230b0b0e' stop-opacity='0'/></radialGradient></defs><polygon points='32,8 38,26 56,26 42,37 47,55 32,44 17,55 22,37 8,26 26,26' fill='none' stroke='%23e8132a' stroke-width='2.5' opacity='0.3'/><path d='M32 12 L26 32 L32 29 L38 32 Z' fill='%23e8132a'/><path d='M32 12 L38 32 L44 26 L50 38 Z' fill='%23c0102a' opacity='0.85'/><path d='M32 12 L26 32 L20 26 L14 38 Z' fill='%23c0102a' opacity='0.85'/><path d='M26 32 L14 38 L32 52 L32 29 Z' fill='%23e8132a' opacity='0.9'/><path d='M38 32 L50 38 L32 52 L32 29 Z' fill='%23ff1a35' opacity='0.9'/><circle cx='32' cy='32' r='4' fill='%23ff2a40'/><circle cx='32' cy='32' r='2' fill='%23ffffff'/></svg>">
-</head>
-""", unsafe_allow_html=True)
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # HERO
