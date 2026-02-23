@@ -597,6 +597,25 @@ div[role="tablist"] {
   color: var(--txt);
   position: relative;
 }
+.answer-box p { margin: 0 0 10px; }
+.answer-box h1, .answer-box h2, .answer-box h3 {
+  font-family: 'Rajdhani', sans-serif;
+  color: #fff;
+  font-weight: 600;
+  margin: 20px 0 8px;
+  letter-spacing: 1px;
+}
+.answer-box strong { color: #fff; }
+.answer-box ul, .answer-box ol {
+  padding-left: 20px;
+  margin: 8px 0 14px;
+}
+.answer-box li { margin-bottom: 4px; }
+.answer-box hr {
+  border: none;
+  border-top: 1px solid var(--bdr) !important;
+  margin: 16px 0 !important;
+}
 .answer-box::before {
   content: 'AI RESPONSE';
   position: absolute;
@@ -950,7 +969,10 @@ with tab_main:
             st.markdown('<div class="sec-label">03 &nbsp; Answer</div>', unsafe_allow_html=True)
             scope_label = ", ".join(selected_sources) if selected_sources else "all docs"
             st.markdown(f'<div class="method-tag">via {method} &nbsp;·&nbsp; {len(chunks)} chunks &nbsp;·&nbsp; {cite_format} &nbsp;·&nbsp; {scope_label}</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="answer-box">{answer}</div>', unsafe_allow_html=True)
+            # Convert newlines to markdown and render inside styled container
+            st.markdown('<div class="answer-box">', unsafe_allow_html=True)
+            st.markdown(answer)
+            st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="sec-label">04 &nbsp; Sources</div>', unsafe_allow_html=True)
             st.markdown('<div class="sec-title">Citation Chunks</div>', unsafe_allow_html=True)
