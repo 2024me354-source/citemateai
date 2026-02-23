@@ -70,12 +70,24 @@ def ingest_pdf(file_bytes, filename):
     progress.empty()
     return total
 
-def retrieve_rpc(vec_str, match_count):
+def get_all_source_files():
+    """Fetch distinct source_file names from Supabase."""
+    rows = supabase.table("documents").select("source_file").execute().data or []
+    return sorted(set(r["source_file"] for r in rows))
+
+def retrieve_rpc(vec_str, match_count, source_files=None):
+    # RPC doesn't support source filtering natively — use fallback when filtering
+    if source_files:
+        return []
     r = supabase.rpc("match_documents", {"query_embedding": vec_str, "match_count": match_count}).execute()
     return r.data or []
 
-def retrieve_fallback(vec, match_count):
-    rows = supabase.table("documents").select("content, page_number, source_file, embedding").execute().data or []
+def retrieve_fallback(vec, match_count, source_files=None):
+    query = supabase.table("documents").select("content, page_number, source_file, embedding")
+    # Filter rows by selected source files using in_ operator
+    if source_files:
+        query = query.in_("source_file", source_files)
+    rows = query.execute().data or []
     q = np.array(vec, dtype="float32")
     scored = []
     for row in rows:
@@ -85,15 +97,18 @@ def retrieve_fallback(vec, match_count):
         scored.append({**row, "similarity": float(np.dot(q, np.array(emb, dtype="float32")))})
     return sorted(scored, key=lambda x: x["similarity"], reverse=True)[:match_count]
 
-def retrieve(question, match_count=5):
+def retrieve(question, match_count=5, source_files=None):
     vec = embed([question])[0]
     vec_str = vec_to_string(vec)
-    try:
-        chunks = retrieve_rpc(vec_str, match_count)
-        if chunks: return chunks, "RPC"
-    except Exception:
-        pass
-    return retrieve_fallback(vec, match_count), "Fallback"
+    # Use RPC only when no source filter (RPC searches all docs)
+    if not source_files:
+        try:
+            chunks = retrieve_rpc(vec_str, match_count)
+            if chunks: return chunks, "RPC"
+        except Exception:
+            pass
+    # Always use fallback when filtering by source
+    return retrieve_fallback(vec, match_count, source_files=source_files), "Filtered"
 
 def build_context(chunks, word_limit=1500):
     parts, total = [], 0
@@ -594,6 +609,80 @@ div[data-testid="stRadio"] input { display: none !important; }
   margin-bottom: 12px;
 }
 
+
+/* ─── Source file multiselect ─── */
+.source-select-box {
+  background: var(--bg3);
+  border: 1px solid var(--bdr2);
+  border-top: 2px solid var(--red);
+  padding: 18px 20px 20px;
+  margin-bottom: 16px;
+}
+.source-select-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: var(--red);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.source-select-desc {
+  font-family: 'Exo 2', sans-serif;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+.all-badge {
+  display: inline-block;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: #00e676;
+  background: rgba(0,230,118,0.07);
+  border: 1px solid rgba(0,230,118,0.2);
+  padding: 2px 10px;
+  margin-top: 4px;
+}
+.filtered-badge {
+  display: inline-block;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--red);
+  background: rgba(232,19,42,0.08);
+  border: 1px solid var(--bdr);
+  padding: 2px 10px;
+  margin-top: 4px;
+}
+/* Multiselect widget */
+[data-testid="stMultiSelect"] > div {
+  background: var(--bg3) !important;
+  border: 1px solid var(--bdr2) !important;
+  border-radius: 0 !important;
+}
+[data-testid="stMultiSelect"] > div:focus-within {
+  border-color: var(--red) !important;
+}
+[data-testid="stMultiSelect"] span[data-baseweb="tag"] {
+  background: rgba(232,19,42,0.15) !important;
+  border: 1px solid var(--bdr) !important;
+  border-radius: 0 !important;
+  font-family: 'Share Tech Mono', monospace !important;
+  font-size: 11px !important;
+  color: var(--txt) !important;
+}
+[data-testid="stMultiSelect"] input {
+  background: transparent !important;
+  color: var(--txt) !important;
+  font-family: 'Exo 2', sans-serif !important;
+}
+[data-testid="stMultiSelect"] label {
+  font-family: 'Share Tech Mono', monospace !important;
+  font-size: 10px !important;
+  letter-spacing: 3px !important;
+  color: var(--muted) !important;
+}
+
 .diag-card {
   background: var(--bg2);
   border: 1px solid var(--bdr2);
@@ -698,6 +787,31 @@ with tab_main:
             height=120,
         )
 
+        # ── Source file selector ─────────────────────────
+        all_sources = get_all_source_files()
+        st.markdown('''<div class="source-select-box">
+  <div class="source-select-title">⬡ &nbsp; Scope · Select Documents</div>
+  <div class="source-select-desc">Choose which PDFs to search. Leave blank to search all.</div>''', unsafe_allow_html=True)
+
+        selected_sources = st.multiselect(
+            "FILTER BY DOCUMENT",
+            options=all_sources,
+            default=[],
+            placeholder="All documents (no filter)",
+            label_visibility="collapsed",
+        )
+        if selected_sources:
+            st.markdown(
+                f'<div class="filtered-badge">⬡ Searching {len(selected_sources)} of {len(all_sources)} document(s)</div>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                f'<div class="all-badge">✓ Searching all {len(all_sources)} document(s)</div>',
+                unsafe_allow_html=True
+            )
+        st.markdown('</div>', unsafe_allow_html=True)
+
         # ── Citation format selector ──────────────────────
         FORMAT_INFO = {
             "APA":     "Author-date in-text · References list",
@@ -733,7 +847,8 @@ with tab_main:
         if run:
             with st.spinner("Searching vector store..."):
                 try:
-                    chunks, method = retrieve(question, match_count=top_k)
+                    source_filter = selected_sources if selected_sources else None
+                    chunks, method = retrieve(question, match_count=top_k, source_files=source_filter)
                 except Exception as e:
                     st.error(f"Retrieval error: {e}"); st.stop()
 
@@ -749,7 +864,8 @@ with tab_main:
 
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown('<div class="sec-label">03 &nbsp; Answer</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="method-tag">via {method} &nbsp;·&nbsp; {len(chunks)} chunks &nbsp;·&nbsp; {cite_format}</div>', unsafe_allow_html=True)
+            scope_label = ", ".join(selected_sources) if selected_sources else "all docs"
+            st.markdown(f'<div class="method-tag">via {method} &nbsp;·&nbsp; {len(chunks)} chunks &nbsp;·&nbsp; {cite_format} &nbsp;·&nbsp; {scope_label}</div>', unsafe_allow_html=True)
             st.markdown(f'<div class="answer-box">{answer}</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="sec-label">04 &nbsp; Sources</div>', unsafe_allow_html=True)
