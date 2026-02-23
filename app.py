@@ -104,11 +104,45 @@ def build_context(chunks, word_limit=1500):
         parts.append(c["content"]); total += len(words)
     return "\n\n---\n\n".join(parts)
 
-def ask_groq(context, question):
+CITATION_PROMPTS = {
+    "APA": (
+        "You are a research assistant. Answer ONLY using the provided context. "
+        "Format all in-text citations in APA 7th edition style: (Author, Year, p. X) or (Filename, p. X) if no author is known. "
+        "At the end of your answer, add a References section listing each source in APA format. "
+        "Use the filename and page number where full details are unavailable."
+    ),
+    "MLA": (
+        "You are a research assistant. Answer ONLY using the provided context. "
+        "Format all in-text citations in MLA 9th edition style: (Author Page) or (Filename Page) if no author is known. "
+        "At the end of your answer, add a Works Cited section in MLA format. "
+        "Use filename and page number where full details are unavailable."
+    ),
+    "Chicago": (
+        "You are a research assistant. Answer ONLY using the provided context. "
+        "Format all citations as Chicago footnote-style, indicated inline like [1], [2], etc. "
+        "At the end of your answer, add a numbered Notes section with full Chicago citations. "
+        "Use filename and page number where full details are unavailable."
+    ),
+    "Harvard": (
+        "You are a research assistant. Answer ONLY using the provided context. "
+        "Format all in-text citations in Harvard style: (Author Year, p. X) or (Filename Year, p. X) if no author is known. "
+        "At the end of your answer, add a Reference List section in Harvard format. "
+        "Use filename and page number where full details are unavailable."
+    ),
+    "IEEE": (
+        "You are a research assistant. Answer ONLY using the provided context. "
+        "Format all citations as IEEE numbered references inline like [1], [2], etc. "
+        "At the end of your answer, add a numbered References section in IEEE format: "
+        "[1] A. Author, Title, Publisher, Year, p. X. Use filename and page number where full details are unavailable."
+    ),
+}
+
+def ask_groq(context, question, citation_format="APA"):
+    system_prompt = CITATION_PROMPTS.get(citation_format, CITATION_PROMPTS["APA"])
     resp = groq_client.chat.completions.create(
         model="llama-3.1-8b-instant",
         messages=[
-            {"role": "system", "content": "You are a research assistant. Answer ONLY using the provided context. Cite sources as (source_file, page_number)."},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Context:\n{context}\n\nQuestion:\n{question}"},
         ],
         temperature=0.2, max_tokens=1024,
@@ -498,6 +532,68 @@ div[role="tablist"] {
   margin-bottom: 12px;
 }
 
+
+/* ─── Citation format selector ─── */
+div[data-testid="stRadio"] > label {
+  font-family: 'Share Tech Mono', monospace !important;
+  font-size: 10px !important;
+  letter-spacing: 3px !important;
+  text-transform: uppercase !important;
+  color: var(--muted) !important;
+}
+div[data-testid="stRadio"] > div {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  margin-top: 8px !important;
+}
+div[data-testid="stRadio"] > div > label {
+  background: var(--bg3) !important;
+  border: 1px solid var(--bdr2) !important;
+  border-radius: 0 !important;
+  padding: 7px 16px !important;
+  font-family: 'Share Tech Mono', monospace !important;
+  font-size: 11px !important;
+  letter-spacing: 2px !important;
+  color: var(--muted) !important;
+  cursor: pointer !important;
+  transition: all 0.15s !important;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px)) !important;
+}
+div[data-testid="stRadio"] > div > label:hover {
+  border-color: var(--bdr) !important;
+  color: var(--txt) !important;
+}
+div[data-testid="stRadio"] > div > label[data-checked="true"],
+div[data-testid="stRadio"] > div > label:has(input:checked) {
+  background: rgba(232,19,42,0.12) !important;
+  border-color: var(--red) !important;
+  color: var(--red) !important;
+}
+div[data-testid="stRadio"] input { display: none !important; }
+
+.cite-format-box {
+  background: var(--bg3);
+  border: 1px solid var(--bdr2);
+  border-top: 2px solid var(--red);
+  padding: 18px 20px 20px;
+  margin-bottom: 16px;
+}
+.cite-format-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: var(--red);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.cite-format-desc {
+  font-family: 'Exo 2', sans-serif;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
 .diag-card {
   background: var(--bg2);
   border: 1px solid var(--bdr2);
@@ -602,6 +698,31 @@ with tab_main:
             height=120,
         )
 
+        # ── Citation format selector ──────────────────────
+        FORMAT_INFO = {
+            "APA":     "Author-date in-text · References list",
+            "MLA":     "Author-page in-text · Works Cited",
+            "Chicago": "Numbered footnotes [1] · Notes list",
+            "Harvard": "Author-year in-text · Reference List",
+            "IEEE":    "Numbered inline [1] · IEEE References",
+        }
+        st.markdown('''<div class="cite-format-box">
+  <div class="cite-format-title">⬡ &nbsp; Citation Format</div>
+  <div class="cite-format-desc">Choose how sources are cited in the answer</div>''', unsafe_allow_html=True)
+
+        cite_format = st.radio(
+            "CITATION FORMAT",
+            options=list(FORMAT_INFO.keys()),
+            index=0,
+            horizontal=True,
+            label_visibility="collapsed",
+        )
+        st.markdown(
+            f'<div style="font-family:Share Tech Mono,monospace;font-size:10px;color:#6b6b82;letter-spacing:2px;margin-top:6px">{FORMAT_INFO[cite_format]}</div>',
+            unsafe_allow_html=True
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
+
         c1, c2 = st.columns([2, 1], gap="medium")
         with c1:
             top_k = st.slider("CHUNKS TO RETRIEVE", min_value=3, max_value=10, value=5)
@@ -622,13 +743,13 @@ with tab_main:
 
             with st.spinner("Generating answer..."):
                 try:
-                    answer = ask_groq(build_context(chunks), question)
+                    answer = ask_groq(build_context(chunks), question, citation_format=cite_format)
                 except Exception as e:
                     st.error(f"LLM error: {e}"); st.stop()
 
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown('<div class="sec-label">03 &nbsp; Answer</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="method-tag">via {method} &nbsp;·&nbsp; {len(chunks)} chunks</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="method-tag">via {method} &nbsp;·&nbsp; {len(chunks)} chunks &nbsp;·&nbsp; {cite_format}</div>', unsafe_allow_html=True)
             st.markdown(f'<div class="answer-box">{answer}</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="sec-label">04 &nbsp; Sources</div>', unsafe_allow_html=True)
