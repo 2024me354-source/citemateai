@@ -852,7 +852,7 @@ div[data-testid="stRadio"] input { display: none !important; }
 # ── Custom SVG Favicon ────────────────────────────────────────────────────────
 st.markdown("""
 <head>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' fill='%230b0b0e'/><polygon points='32,6 58,20 58,44 32,58 6,44 6,20' fill='none' stroke='%23e8132a' stroke-width='4'/><polygon points='32,14 50,24 50,40 32,50 14,40 14,24' fill='%23e8132a'/><text x='32' y='37' font-family='Arial Black' font-size='18' font-weight='900' fill='%23ffffff' text-anchor='middle'>C</text></svg>">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%230b0b0e'/><rect width='64' height='64' rx='12' fill='url(%23grad)' opacity='0.4'/><defs><radialGradient id='grad' cx='50%25' cy='30%25' r='60%25'><stop offset='0%25' stop-color='%23e8132a' stop-opacity='0.3'/><stop offset='100%25' stop-color='%230b0b0e' stop-opacity='0'/></radialGradient></defs><polygon points='32,8 38,26 56,26 42,37 47,55 32,44 17,55 22,37 8,26 26,26' fill='none' stroke='%23e8132a' stroke-width='2.5' opacity='0.3'/><path d='M32 12 L26 32 L32 29 L38 32 Z' fill='%23e8132a'/><path d='M32 12 L38 32 L44 26 L50 38 Z' fill='%23c0102a' opacity='0.85'/><path d='M32 12 L26 32 L20 26 L14 38 Z' fill='%23c0102a' opacity='0.85'/><path d='M26 32 L14 38 L32 52 L32 29 Z' fill='%23e8132a' opacity='0.9'/><path d='M38 32 L50 38 L32 52 L32 29 Z' fill='%23ff1a35' opacity='0.9'/><circle cx='32' cy='32' r='4' fill='%23ff2a40'/><circle cx='32' cy='32' r='2' fill='%23ffffff'/></svg>">
 </head>
 """, unsafe_allow_html=True)
 
