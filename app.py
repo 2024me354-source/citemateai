@@ -6,16 +6,13 @@ from supabase import create_client, Client
 from sentence_transformers import SentenceTransformer
 from groq import Groq
 
-# ── Session state ─────────────────────────────────────────────────────────────
 if "ingested_files" not in st.session_state:
     st.session_state.ingested_files = set()
 
-# ── Secrets ───────────────────────────────────────────────────────────────────
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 
-# ── Cached resources ──────────────────────────────────────────────────────────
 @st.cache_resource
 def load_model():
     return SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
@@ -32,7 +29,6 @@ model       = load_model()
 supabase    = get_supabase()
 groq_client = get_groq_client()
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
 def vec_to_string(vec):
     return "[" + ",".join(str(round(float(v), 8)) for v in vec) + "]"
 
@@ -107,7 +103,7 @@ def retrieve(question, match_count=5, source_files=None):
             if chunks: return chunks, "RPC"
         except Exception:
             pass
-    # Always use fallback when filtering by source
+    
     return retrieve_fallback(vec, match_count, source_files=source_files), "Filtered"
 
 def build_context(chunks, word_limit=1500):
@@ -119,7 +115,6 @@ def build_context(chunks, word_limit=1500):
         parts.append(c["content"]); total += len(words)
     return "\n\n---\n\n".join(parts)
 
-# ── Per-format citation templates injected into user message ─────────────────
 CITATION_FORMATS = {
     "APA": {
         "label": "APA 7th Edition",
@@ -249,7 +244,6 @@ def ask_groq(context, question, citation_format="APA"):
     return resp.choices[0].message.content.strip()
 
 
-# ── Custom PIL Favicon ───────────────────────────────────────────────────────
 @st.cache_resource
 def get_favicon():
     from PIL import Image, ImageDraw
@@ -282,14 +276,10 @@ def get_favicon():
     draw.ellipse([cx-3,cy-3,cx+3,cy+3], fill=(255,255,255,255))
     return img
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# PAGE CONFIG — must be first Streamlit call
-# ═══════════════════════════════════════════════════════════════════════════════
+
 st.set_page_config(page_title="CiteMate AI", page_icon=get_favicon(), layout="wide", initial_sidebar_state="collapsed")
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# INJECT CSS — target every Streamlit wrapper aggressively
-# ═══════════════════════════════════════════════════════════════════════════════
+
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;800&display=swap');
@@ -882,11 +872,6 @@ div[data-testid="stRadio"] input { display: none !important; }
 
 
 
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# HERO
-# ═══════════════════════════════════════════════════════════════════════════════
 n_files = len(st.session_state.ingested_files)
 st.markdown(f"""
 <div class="hero-wrap">
@@ -904,19 +889,12 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# TABS
-# ═══════════════════════════════════════════════════════════════════════════════
 tab_main, tab_diag = st.tabs(["  ◈  RESEARCH  ", "  ◎  DIAGNOSTICS  "])
 
 
-# ══════════════════════════════════════════════════════════════════════
-# RESEARCH TAB
-# ══════════════════════════════════════════════════════════════════════
 with tab_main:
     col_left, col_right = st.columns([1, 1.7], gap="small")
 
-    # ── LEFT: UPLOAD ──────────────────────────────────────────────────
     with col_left:
         st.markdown('<div class="panel panel-left">', unsafe_allow_html=True)
         st.markdown('<div class="sec-label">01 &nbsp; Upload</div>', unsafe_allow_html=True)
@@ -951,7 +929,6 @@ with tab_main:
 
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # ── RIGHT: ASK + ANSWER ───────────────────────────────────────────
     with col_right:
         st.markdown('<div class="panel">', unsafe_allow_html=True)
         st.markdown('<div class="sec-label">02 &nbsp; Query</div>', unsafe_allow_html=True)
@@ -963,7 +940,6 @@ with tab_main:
             height=120,
         )
 
-        # ── Source file selector ─────────────────────────
         all_sources = get_all_source_files()
         st.markdown('''<div class="source-select-box">
   <div class="source-select-title">⬡ &nbsp; Scope · Select Documents</div>
@@ -988,7 +964,6 @@ with tab_main:
             )
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # ── Citation format selector ──────────────────────
         FORMAT_INFO = {
             "APA":     "(report.pdf, p. 5)  ·  References",
             "MLA":     "(report.pdf 5)  ·  Works Cited",
@@ -1059,9 +1034,6 @@ with tab_main:
         st.markdown('</div>', unsafe_allow_html=True)
 
 
-# ══════════════════════════════════════════════════════════════════════
-# DIAGNOSTICS TAB
-# ══════════════════════════════════════════════════════════════════════
 with tab_diag:
     st.markdown("<br>", unsafe_allow_html=True)
     d1, d2, d3, d4 = st.columns(4, gap="small")
