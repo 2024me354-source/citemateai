@@ -592,29 +592,66 @@ div[role="tablist"] {
   padding: 28px 32px;
   margin: 12px 0 24px;
   font-family: 'Exo 2', sans-serif;
-  font-size: 15px;
-  line-height: 1.85;
-  color: var(--txt);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.9;
+  color: #ffffff !important;
   position: relative;
 }
-.answer-box p { margin: 0 0 10px; }
+/* Force ALL text inside answer-box to be bright white */
+.answer-box *,
+.answer-box p,
+.answer-box span,
+.answer-box div,
+.answer-box li {
+  color: #ffffff !important;
+  font-size: 15px !important;
+  font-weight: 500 !important;
+}
+.answer-box p { margin: 0 0 12px; }
 .answer-box h1, .answer-box h2, .answer-box h3 {
-  font-family: 'Rajdhani', sans-serif;
-  color: #fff;
-  font-weight: 600;
-  margin: 20px 0 8px;
+  font-family: 'Rajdhani', sans-serif !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  font-size: 18px !important;
+  margin: 22px 0 10px;
   letter-spacing: 1px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--bdr);
+  padding-bottom: 6px;
 }
-.answer-box strong { color: #fff; }
+.answer-box strong, .answer-box b {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+.answer-box em { color: #ffcccc !important; font-style: italic; }
 .answer-box ul, .answer-box ol {
-  padding-left: 20px;
-  margin: 8px 0 14px;
+  padding-left: 22px;
+  margin: 8px 0 16px;
 }
-.answer-box li { margin-bottom: 4px; }
+.answer-box li {
+  margin-bottom: 6px;
+  color: #ffffff !important;
+}
 .answer-box hr {
   border: none;
   border-top: 1px solid var(--bdr) !important;
-  margin: 16px 0 !important;
+  margin: 18px 0 !important;
+}
+/* Also brighten ALL general content text in the main panel */
+.panel p, .panel li, .panel div,
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] li,
+[data-testid="stMarkdownContainer"] span {
+  color: #e8e8f0 !important;
+  font-weight: 400 !important;
+}
+/* Expander content text */
+[data-testid="stExpander"] [data-testid="stMarkdownContainer"] p,
+[data-testid="stExpander"] [data-testid="stMarkdownContainer"] span {
+  color: #d0d0e0 !important;
+  font-size: 14px !important;
+  line-height: 1.7 !important;
 }
 .answer-box::before {
   content: 'AI RESPONSE';
