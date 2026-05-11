@@ -9,9 +9,23 @@ from groq import Groq
 if "ingested_files" not in st.session_state:
     st.session_state.ingested_files = set()
 
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+# ── Secret validation ────────────────────────────────────────────────────────
+def _load_secrets():
+    missing = [k for k in ("SUPABASE_URL", "SUPABASE_KEY", "GROQ_API_KEY") if k not in st.secrets]
+    if missing:
+        st.error(f"❌ Missing Streamlit secrets: **{', '.join(missing)}**\n\nAdd them under **App Settings → Secrets**.")
+        st.stop()
+    url = st.secrets["SUPABASE_URL"].strip().rstrip("/")
+    if not url.startswith("https://"):
+        st.error(
+            f"❌ `SUPABASE_URL` looks wrong: `{url}`\n\n"
+            "It must start with `https://` and look like:\n"
+            "`https://<project-ref>.supabase.co`"
+        )
+        st.stop()
+    return url, st.secrets["SUPABASE_KEY"], st.secrets["GROQ_API_KEY"]
+
+SUPABASE_URL, SUPABASE_KEY, GROQ_API_KEY = _load_secrets()
 
 @st.cache_resource
 def load_model():
@@ -26,8 +40,25 @@ def get_groq_client():
     return Groq(api_key=GROQ_API_KEY)
 
 model       = load_model()
-supabase    = get_supabase()
 groq_client = get_groq_client()
+
+# ── Supabase connectivity check (catches paused projects & bad credentials) ──
+try:
+    supabase = get_supabase()
+    supabase.table("documents").select("id").limit(1).execute()
+except Exception as _conn_err:
+    st.error(
+        "**❌ Cannot connect to Supabase.**\n\n"
+        "**Most likely causes:**\n"
+        "1. 🔴 **Project is paused** (free-tier Supabase pauses after ~1 week of inactivity) — "
+        "go to [app.supabase.com](https://app.supabase.com), open your project, and click **Restore project**.\n"
+        "2. 🔑 **Wrong credentials** — verify `SUPABASE_URL` and `SUPABASE_KEY` in Streamlit "
+        "**App Settings → Secrets**.\n"
+        "3. 🔗 **Bad URL format** — must be exactly `https://<ref>.supabase.co` "
+        "(no trailing slash, no `/rest/v1` suffix).\n\n"
+        f"Raw error: `{_conn_err}`"
+    )
+    st.stop()
 
 def vec_to_string(vec):
     return "[" + ",".join(str(round(float(v), 8)) for v in vec) + "]"
@@ -40,8 +71,16 @@ def chunk_text(text, max_words=600):
     return [" ".join(words[i:i+max_words]) for i in range(0, len(words), max_words) if words[i:i+max_words]]
 
 def already_ingested(filename):
-    r = supabase.table("documents").select("id").eq("source_file", filename).limit(1).execute()
-    return len(r.data) > 0
+    try:
+        r = supabase.table("documents").select("id").eq("source_file", filename).limit(1).execute()
+        return len(r.data) > 0
+    except Exception as e:
+        st.error(
+            f"**\u274c Lost connection to Supabase** while checking `{filename}`.\n\n"
+            "If your project was just restored from pause, please **reload the page**.\n\n"
+            f"Error: `{e}`"
+        )
+        st.stop()
 
 def ingest_pdf(file_bytes, filename):
     doc = fitz.open(stream=file_bytes, filetype="pdf")
